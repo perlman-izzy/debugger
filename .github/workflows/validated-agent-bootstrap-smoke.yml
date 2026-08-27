@@ -7,6 +7,12 @@ on:
     paths:
       - 'validated_agent_bootstrap/**'
       - '.github/workflows/validated-agent-bootstrap-smoke.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'validated_agent_bootstrap/**'
+      - '.github/workflows/validated-agent-bootstrap-smoke.yml'
 
 permissions:
   contents: read
@@ -18,10 +24,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify branch isolation
+        shell: bash
         run: |
           set -euo pipefail
+          echo "event=$GITHUB_EVENT_NAME"
           echo "ref=$GITHUB_REF"
-          echo "sha=$GITHUB_SHA"
-          test "$GITHUB_REF_NAME" = "validated-agent-bootstrap-20260827"
+          echo "ref_name=$GITHUB_REF_NAME"
+          echo "head_ref=${GITHUB_HEAD_REF:-}"
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            test "$GITHUB_HEAD_REF" = "validated-agent-bootstrap-20260827"
+          else
+            test "$GITHUB_REF_NAME" = "validated-agent-bootstrap-20260827"
+          fi
       - name: Credential-free free-model smoke
         run: python3 validated_agent_bootstrap/free_model_smoke.py
