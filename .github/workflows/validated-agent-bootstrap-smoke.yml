@@ -1,0 +1,27 @@
+name: Validated Agent Bootstrap Smoke
+
+on:
+  push:
+    branches:
+      - validated-agent-bootstrap-20260827
+    paths:
+      - 'validated_agent_bootstrap/**'
+      - '.github/workflows/validated-agent-bootstrap-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify branch isolation
+        run: |
+          set -euo pipefail
+          echo "ref=$GITHUB_REF"
+          echo "sha=$GITHUB_SHA"
+          test "$GITHUB_REF_NAME" = "validated-agent-bootstrap-20260827"
+      - name: Credential-free free-model smoke
+        run: python3 validated_agent_bootstrap/free_model_smoke.py
