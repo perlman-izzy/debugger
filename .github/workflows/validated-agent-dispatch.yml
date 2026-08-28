@@ -1,21 +1,53 @@
 name: Validated Agent Dispatcher
 
 on:
+  schedule:
+    - cron: '*/5 * * * *'
   issues:
     types: [opened]
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: validated-agent-cloud-autowork
+  cancel-in-progress: false
 
 jobs:
   dispatch:
-    if: startsWith(github.event.issue.title, '[VALIDATED-AGENT-RUN]')
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.event.issue.title, '[VALIDATED-AGENT-RUN]')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - name: Checkout isolated agent branch
         uses: actions/checkout@v4
         with:
           ref: validated-agent-bootstrap-20260827
-      - name: Run credential-free model smoke
-        run: python3 validated_agent_bootstrap/free_model_smoke.py
+          fetch-depth: 0
+
+      - name: Verify branch isolation and baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = "validated-agent-bootstrap-20260827"
+          cd validated_agent_bootstrap
+          python3 -m unittest -v test_epistemic.py
+
+      - name: Run one bounded autonomous coding tick
+        run: python3 validated_agent_bootstrap/autowork_tick.py
+
+      - name: Persist only isolated autowork state/code
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = "validated-agent-bootstrap-20260827"
+          git config user.name 'validated-agent-autowork'
+          git config user.email 'actions@users.noreply.github.com'
+          git add validated_agent_bootstrap
+          if git diff --cached --quiet; then
+            echo 'No durable changes this tick.'
+            exit 0
+          fi
+          git commit -m "Cloud autowork tick $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push origin HEAD:validated-agent-bootstrap-20260827
