@@ -8,11 +8,12 @@ import re
 import subprocess
 import sys
 from datetime import datetime, timezone
+import urllib.error
 import urllib.request
 
 HERE = Path(__file__).resolve().parent
 URL = "https://opencode.ai/inference/openai/v1/chat/completions"
-MODEL = "nemotron-3-ultra-free"
+MODELS = ["nemotron-3-ultra-free", "big-pickle", "laguna-s-2.1-free"]
 ALLOWED_FILES = {
     "epistemic.py": HERE / "epistemic.py",
     "test_epistemic.py": HERE / "test_epistemic.py",
@@ -20,6 +21,18 @@ ALLOWED_FILES = {
 STATE_PATH = HERE / "AUTOWORK_STATE.json"
 OBJECTIVE_PATH = HERE / "AUTOWORK_OBJECTIVE.md"
 MAX_EVENTS = 40
+BANNED_SOURCE_TOKENS = (
+    "import subprocess",
+    "from subprocess",
+    "import socket",
+    "from socket",
+    "import requests",
+    "from requests",
+    "import urllib",
+    "from urllib",
+    "os.system(",
+    "os.popen(",
+)
 
 
 def utcnow() -> str:
@@ -34,8 +47,13 @@ def run_tests() -> tuple[int, str]:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         timeout=120,
+        env={**dict(__import__("os").environ), "PYTHONDONTWRITEBYTECODE": "1"},
     )
     return proc.returncode, proc.stdout[-12000:]
+
+
+def test_names(text: str) -> set[str]:
+    return set(re.findall(r"^\s*def\s+(test_[A-Za-z0-9_]+)\s*\(", text, flags=re.MULTILINE))
 
 
 def load_state() -> dict:
@@ -84,9 +102,9 @@ def extract_json(text: str) -> dict:
         raise ValueError("no JSON object found")
 
 
-def call_model(prompt: str) -> tuple[str, str]:
+def call_one_model(model: str, prompt: str) -> tuple[str, str]:
     payload = {
-        "model": MODEL,
+        "model": model,
         "messages": [
             {
                 "role": "system",
@@ -103,18 +121,37 @@ def call_model(prompt: str) -> tuple[str, str]:
     req = urllib.request.Request(
         URL,
         data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", "User-Agent": "validated-agent-autowork/0.1"},
+        headers={"Content-Type": "application/json", "User-Agent": "validated-agent-autowork/0.2"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        raw = resp.read().decode()
+    try:
+        with urllib.request.urlopen(req, timeout=75) as resp:
+            raw = resp.read().decode()
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")
+        raise ValueError(f"HTTP {exc.code}: {body[:1000]}") from exc
+
     obj = json.loads(raw)
-    msg = obj["choices"][0]["message"]
+    choices = obj.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ValueError(f"unexpected response envelope: {raw[:1200]}")
+    msg = choices[0].get("message") or {}
     content = msg.get("content")
     reasoning = msg.get("reasoning") or ""
     if not content:
-        raise ValueError(f"model returned no content; reasoning={reasoning[:1200]}")
+        raise ValueError(f"model returned no content; reasoning={reasoning[:1200]}; raw={raw[:1600]}")
     return content, reasoning
+
+
+def call_model(prompt: str) -> tuple[str, str, str]:
+    failures: list[str] = []
+    for model in MODELS:
+        try:
+            content, reasoning = call_one_model(model, prompt)
+            return model, content, reasoning
+        except Exception as exc:
+            failures.append(f"{model}: {type(exc).__name__}: {exc}")
+    raise ValueError("all model routes failed | " + " | ".join(failures))
 
 
 def build_prompt(state: dict, test_rc: int, test_output: str) -> str:
@@ -152,12 +189,18 @@ Return exactly one JSON object:
 
 Constraints:
 - one file per tick;
-- preserve all existing passing invariants unless deliberately strengthening a test;
+- preserve every existing test; adding stronger tests is preferred;
 - do not weaken/delete tests merely to obtain green;
-- do not use network, credentials, GitHub APIs, subprocesses, or shell in proposed source code;
+- do not add network, credential, GitHub API, subprocess, shell, or process-control code;
 - do not alter files outside the two allowed files;
 - do not treat model output as verifier authority.
 """
+
+
+def reject_event(state: dict, **fields) -> None:
+    state["events"].append({"time": utcnow(), "decision": "REJECT", **fields})
+    state["rejected_edits"] += 1
+    save_state(state)
 
 
 def main() -> int:
@@ -177,7 +220,7 @@ def main() -> int:
         return 0
 
     try:
-        content, reasoning = call_model(build_prompt(state, before_rc, before_output))
+        selected_model, content, reasoning = call_model(build_prompt(state, before_rc, before_output))
         proposal = extract_json(content)
     except Exception as exc:
         state["events"].append({
@@ -199,37 +242,30 @@ def main() -> int:
         state["events"].append({
             "time": utcnow(),
             "decision": "NO_CHANGE",
+            "model": selected_model,
             "hypothesis": hypothesis,
             "expected_observation": expected,
             "note": note,
         })
         save_state(state)
-        print("AUTOWORK_NO_CHANGE")
+        print(f"AUTOWORK_NO_CHANGE model={selected_model}")
         return 0
 
     if action != "write_file":
-        state["events"].append({
-            "time": utcnow(),
-            "decision": "REJECT",
-            "reason": f"unsupported action {action!r}",
-        })
-        state["rejected_edits"] += 1
-        save_state(state)
+        reject_event(state, reason=f"unsupported action {action!r}", model=selected_model)
         print("AUTOWORK_REJECT unsupported action")
         return 0
 
     rel = proposal.get("path")
     replacement = proposal.get("content")
     if rel not in ALLOWED_FILES or not isinstance(replacement, str) or not replacement.strip():
-        state["events"].append({
-            "time": utcnow(),
-            "decision": "REJECT",
-            "reason": "invalid path or empty replacement",
-            "path": rel,
-        })
-        state["rejected_edits"] += 1
-        save_state(state)
+        reject_event(state, reason="invalid path or empty replacement", path=rel, model=selected_model)
         print("AUTOWORK_REJECT invalid proposal")
+        return 0
+
+    if any(token in replacement for token in BANNED_SOURCE_TOKENS):
+        reject_event(state, reason="proposal contains banned process/network capability", path=rel, model=selected_model)
+        print("AUTOWORK_REJECT banned capability")
         return 0
 
     target = ALLOWED_FILES[rel]
@@ -240,10 +276,26 @@ def main() -> int:
             "decision": "NO_CHANGE",
             "reason": "replacement identical to current file",
             "path": rel,
+            "model": selected_model,
         })
         save_state(state)
         print("AUTOWORK_NO_CHANGE identical")
         return 0
+
+    baseline_tests = test_names(ALLOWED_FILES["test_epistemic.py"].read_text())
+    if rel == "test_epistemic.py":
+        proposed_tests = test_names(replacement)
+        missing = sorted(baseline_tests - proposed_tests)
+        if missing:
+            reject_event(
+                state,
+                reason="proposal deletes or renames existing tests",
+                path=rel,
+                missing_tests=missing,
+                model=selected_model,
+            )
+            print(f"AUTOWORK_REJECT missing_tests={missing}")
+            return 0
 
     proposal_hash = hashlib.sha256(replacement.encode()).hexdigest()
     target.write_text(replacement)
@@ -255,21 +307,19 @@ def main() -> int:
     if after_rc != 0:
         target.write_text(original)
         restore_rc, restore_output = run_tests()
-        state["events"].append({
-            "time": utcnow(),
-            "decision": "REJECT",
-            "path": rel,
-            "proposal_sha256": proposal_hash,
-            "hypothesis": hypothesis,
-            "expected_observation": expected,
-            "note": note,
-            "validator_exit": after_rc,
-            "validator_tail": after_output[-4000:],
-            "rollback_verified": restore_rc == 0,
-            "rollback_test_tail": restore_output[-1200:],
-        })
-        state["rejected_edits"] += 1
-        save_state(state)
+        reject_event(
+            state,
+            path=rel,
+            model=selected_model,
+            proposal_sha256=proposal_hash,
+            hypothesis=hypothesis,
+            expected_observation=expected,
+            note=note,
+            validator_exit=after_rc,
+            validator_tail=after_output[-4000:],
+            rollback_verified=restore_rc == 0,
+            rollback_test_tail=restore_output[-1200:],
+        )
         print(f"AUTOWORK_REJECT path={rel} rollback_verified={restore_rc == 0}")
         return 0
 
@@ -277,6 +327,7 @@ def main() -> int:
         "time": utcnow(),
         "decision": "ACCEPT",
         "path": rel,
+        "model": selected_model,
         "proposal_sha256": proposal_hash,
         "hypothesis": hypothesis,
         "expected_observation": expected,
@@ -286,7 +337,7 @@ def main() -> int:
     })
     state["accepted_edits"] += 1
     save_state(state)
-    print(f"AUTOWORK_ACCEPT path={rel} sha256={proposal_hash}")
+    print(f"AUTOWORK_ACCEPT model={selected_model} path={rel} sha256={proposal_hash}")
     return 0
 
 
