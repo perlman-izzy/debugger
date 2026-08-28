@@ -48,8 +48,9 @@ jobs:
               git reset --hard "origin/$BRANCH"
             fi
 
-            if ! python3 validated_agent_bootstrap/safe_autowork_tick.py; then
-              rc=$?
+            python3 validated_agent_bootstrap/safe_autowork_tick.py
+            rc=$?
+            if [ "$rc" -ne 0 ]; then
               echo "DAEMON_FATAL tick=$i worker_exit=$rc"
               exit 1
             fi
@@ -70,9 +71,7 @@ jobs:
             elapsed=$((tick_end - tick_start))
             echo "HEARTBEAT tick=$i/$ITERATIONS phase=COMPLETE elapsed_seconds=$elapsed utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-            if [ "$i" -lt "$ITERATIONS" ]; then
-              if [ "$elapsed" -lt 300 ]; then
-                sleep $((300 - elapsed))
-              fi
+            if [ "$i" -lt "$ITERATIONS" ] && [ "$elapsed" -lt 300 ]; then
+              sleep $((300 - elapsed))
             fi
           done
