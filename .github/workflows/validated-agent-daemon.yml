@@ -1,0 +1,78 @@
+name: Validated Agent Five-Minute Daemon
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validated-agent-cloud-autowork
+  cancel-in-progress: false
+
+jobs:
+  daemon:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.issue.title, '[VALIDATED-AGENT-DAEMON]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      BRANCH: validated-agent-bootstrap-20260827
+      ITERATIONS: '48'
+    steps:
+      - name: Checkout isolated agent branch
+        uses: actions/checkout@v4
+        with:
+          ref: validated-agent-bootstrap-20260827
+          fetch-depth: 0
+
+      - name: Run bounded autonomous tick every five minutes
+        shell: bash
+        run: |
+          set -u -o pipefail
+          test "$(git branch --show-current)" = "$BRANCH"
+          git config user.name 'validated-agent-autowork'
+          git config user.email 'actions@users.noreply.github.com'
+
+          for i in $(seq 1 "$ITERATIONS"); do
+            tick_start=$(date +%s)
+            echo "HEARTBEAT tick=$i/$ITERATIONS phase=START utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+            git fetch origin "$BRANCH"
+            remote_head=$(git rev-parse "origin/$BRANCH")
+            local_head=$(git rev-parse HEAD)
+            if [ "$local_head" != "$remote_head" ]; then
+              echo "HEARTBEAT tick=$i phase=SYNC remote=$remote_head local=$local_head"
+              git reset --hard "origin/$BRANCH"
+            fi
+
+            if ! python3 validated_agent_bootstrap/safe_autowork_tick.py; then
+              rc=$?
+              echo "DAEMON_FATAL tick=$i worker_exit=$rc"
+              exit 1
+            fi
+
+            rm -rf validated_agent_bootstrap/__pycache__
+            git add -A validated_agent_bootstrap
+            if ! git diff --cached --quiet; then
+              git commit -m "Cloud autowork daemon tick $i $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              if ! git push origin "HEAD:$BRANCH"; then
+                echo "DAEMON_FATAL tick=$i non-fast-forward-or-push-failure; refusing force push"
+                exit 1
+              fi
+            else
+              echo "HEARTBEAT tick=$i phase=NO_DURABLE_CHANGE"
+            fi
+
+            tick_end=$(date +%s)
+            elapsed=$((tick_end - tick_start))
+            echo "HEARTBEAT tick=$i/$ITERATIONS phase=COMPLETE elapsed_seconds=$elapsed utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+            if [ "$i" -lt "$ITERATIONS" ]; then
+              if [ "$elapsed" -lt 300 ]; then
+                sleep $((300 - elapsed))
+              fi
+            fi
+          done
