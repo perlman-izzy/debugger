@@ -5,11 +5,16 @@
       "decision": "INCONCLUSIVE",
       "reason": "model/protocol failure: KeyError: 'choices'",
       "time": "2026-08-28T03:30:37.951597+00:00"
+    },
+    {
+      "decision": "INCONCLUSIVE",
+      "reason": "model/protocol failure: ValueError: no JSON object found",
+      "time": "2026-08-28T03:33:40.511651+00:00"
     }
   ],
-  "inconclusive_ticks": 1,
+  "inconclusive_ticks": 2,
   "objective": "# Cloud bootstrap objective\n\nIncrementally strengthen the isolated deterministic prototype for validated long-horizon coding.\n\nImmediate scope:\n- model VERIFIED_FACT / HYPOTHESIS / FALSIFIED_HYPOTHESIS / UNKNOWN distinctly;\n- executor output cannot authorize acceptance;\n- ACCEPT / REJECT / INCONCLUSIVE remain distinct;\n- transient retry, implementation retry, epistemic reset, and trajectory reset remain distinct;\n- after two independent rejections of the same causal hypothesis for the same subgoal, ordinary implementation retry is forbidden and an epistemic reset is required;\n- reset packets contain verified facts, accepted checkpoint identity, and falsified hypotheses, but not executor narrative as authoritative truth;\n- add adversarial tests for attempts to bypass these invariants.\n\nThis cloud branch is a prospective prototype only. Do not claim integration with the local OCC/job-agent-lab/DSH system.",
   "rejected_edits": 0,
   "schema_version": 1,
-  "updated_at": "2026-08-28T03:30:37.951621+00:00"
+  "updated_at": "2026-08-28T03:33:40.511671+00:00"
 }
