@@ -1,0 +1,21 @@
+name: Validated Agent Dispatcher
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    if: startsWith(github.event.issue.title, '[VALIDATED-AGENT-RUN]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout isolated agent branch
+        uses: actions/checkout@v4
+        with:
+          ref: validated-agent-bootstrap-20260827
+      - name: Run credential-free model smoke
+        run: python3 validated_agent_bootstrap/free_model_smoke.py
