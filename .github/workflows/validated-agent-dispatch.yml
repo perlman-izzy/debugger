@@ -1,8 +1,6 @@
 name: Validated Agent Dispatcher
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
   issues:
     types: [opened]
   workflow_dispatch:
@@ -16,7 +14,7 @@ concurrency:
 
 jobs:
   dispatch:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.event.issue.title, '[VALIDATED-AGENT-RUN]')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.issue.title, '[VALIDATED-AGENT-RUN]')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
