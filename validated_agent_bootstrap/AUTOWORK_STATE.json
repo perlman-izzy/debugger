@@ -220,11 +220,17 @@
       "reason": "all model/protocol routes failed: ValueError: nemotron-3-ultra-free: ValueError: unexpected envelope={\"error\":{\"type\":\"server_error\",\"message\":\"Upstream request failed: [502] Upstream error from Nvidia: Service temporarily overloaded\"}} | big-pickle: ValueError: HTTP 429: {\"type\":\"error\",\"error\":{\"type\":\"FreeUsageLimitError\",\"message\":\"Rate limit exceeded. Please try again later.\"}} | laguna-s-2.1-free: TimeoutError: The read operation timed out",
       "run_id": "33139600514",
       "time": "2026-08-28T05:17:15.910049+00:00"
+    },
+    {
+      "decision": "INCONCLUSIVE",
+      "reason": "all model/protocol routes failed: ValueError: nemotron-3-ultra-free: ValueError: unexpected envelope={\"error\":{\"type\":\"server_error\",\"message\":\"Upstream request failed: [502] Upstream error from Nvidia: Service temporarily overloaded\"}} | big-pickle: ValueError: HTTP 429: {\"type\":\"error\",\"error\":{\"type\":\"FreeUsageLimitError\",\"message\":\"Rate limit exceeded. Please try again later.\"}} | laguna-s-2.1-free: TimeoutError: The read operation timed out",
+      "run_id": "33139600514",
+      "time": "2026-08-28T05:22:15.246002+00:00"
     }
   ],
-  "inconclusive_ticks": 15,
+  "inconclusive_ticks": 16,
   "objective": "# Cloud bootstrap objective\n\nIncrementally strengthen the isolated deterministic prototype for validated long-horizon coding.\n\nImmediate scope:\n- model VERIFIED_FACT / HYPOTHESIS / FALSIFIED_HYPOTHESIS / UNKNOWN distinctly;\n- executor output cannot authorize acceptance;\n- ACCEPT / REJECT / INCONCLUSIVE remain distinct;\n- transient retry, implementation retry, epistemic reset, and trajectory reset remain distinct;\n- after two independent rejections of the same causal hypothesis for the same subgoal, ordinary implementation retry is forbidden and an epistemic reset is required;\n- reset packets contain verified facts, accepted checkpoint identity, and falsified hypotheses, but not executor narrative as authoritative truth;\n- add adversarial tests for attempts to bypass these invariants.\n\nThis cloud branch is a prospective prototype only. Do not claim integration with the local OCC/job-agent-lab/DSH system.",
   "rejected_edits": 8,
   "schema_version": 2,
-  "updated_at": "2026-08-28T05:17:15.910075+00:00"
+  "updated_at": "2026-08-28T05:22:15.246028+00:00"
 }
