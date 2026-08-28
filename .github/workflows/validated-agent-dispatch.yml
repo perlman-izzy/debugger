@@ -28,16 +28,16 @@ jobs:
           ref: validated-agent-bootstrap-20260827
           fetch-depth: 0
 
-      - name: Verify branch isolation and baseline
+      - name: Verify branch isolation and frozen baseline
         shell: bash
         run: |
           set -euo pipefail
           test "$(git branch --show-current)" = "validated-agent-bootstrap-20260827"
           cd validated_agent_bootstrap
-          python3 -m unittest -v test_epistemic.py
+          python3 -m unittest -v test_epistemic_frozen.py test_epistemic.py test_source_guard_frozen.py
 
-      - name: Run one bounded autonomous coding tick
-        run: python3 validated_agent_bootstrap/autowork_tick.py
+      - name: Run one guarded autonomous coding tick v2
+        run: python3 validated_agent_bootstrap/safe_autowork_tick.py
 
       - name: Persist only isolated autowork state/code
         shell: bash
